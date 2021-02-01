@@ -34,14 +34,19 @@ def sample_balls(r_centres,tree_data,sizes, maxcount=13000,stride=5):
 class BallSampler:
   def __init__(self, data,sigma=10,mindist=5):
     #     blur the data to connect eventually disconnected regions
-    gaussian = ndimage.gaussian_filter(data, sigma)
-    #   identify as inner points only those that are sufficiently distant from the background
-    inner = ndimage.distance_transform_cdt(gaussian)>mindist
+    self.data = data
+    self.gaussian = ndimage.gaussian_filter(data, sigma)
+    self.mindist = mindist
+
+  def sample(self,N=1000,k=3,sizes = np.arange(3,16), maxcount=13000, stride=5, ):
+        #   identify as inner points only those that are sufficiently distant from the background
+    inner = ndimage.distance_transform_cdt(self.gaussian)>self.mindist
+    self.inner = inner
     self.r_in = np.array(inner.nonzero()).T
-    self.r = np.array(data.nonzero()).T
+    np.random.shuffle(self.r_in)
+    self.r = np.array(self.data.nonzero()).T
     self.tree_data = cKDTree(self.r)
     
-  def sample(self,N=1000,k=3,sizes = np.arange(3,16), maxcount=13000, stride=5, ):
     
     """Run k independent sampling procedures from N centres."""
     self.runs = {}
@@ -53,8 +58,7 @@ class BallSampler:
     self.run_params['k'] = k
     
     for j in range(1, k+1):
-      np.random.shuffle(self.r_in)
-      centres = self.r_in[:N]
+      centres = self.r_in[N*j:N*(j+1)]
 
       self.runs[j] = sample_balls(centres,self.tree_data,sizes, maxcount,stride)
   
@@ -78,3 +82,12 @@ class BallSampler:
     
     results['fit']= fit
     return results
+  
+  def get_remoteness(self,threshold=0):
+    negative = ~(self.data>threshold)
+    negative[self.gaussian==0]=0
+    negative[self.data>0]=0
+
+    self.distance = ndimage.distance_transform_cdt(negative)
+    self.remoteness = self.distance[self.distance>0]
+    self.avg_remoteness = self.remoteness.mean()
